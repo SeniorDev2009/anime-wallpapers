@@ -1,0 +1,32 @@
+node_modules/
+npm-debug.log
+.env
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+dist/
+build/
+.cache/
+
+# Keep uploads but ignore specific files
+uploads/*
+!uploads/.gitkeep
+
+# IDE files
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# OS specific
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Backup files
+*.bak
+*.backup
+*~
