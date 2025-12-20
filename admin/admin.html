@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Anime Wallpapers</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>🎨 Admin Panel</h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="upload">
+                    <span>📤</span> Upload Image
+                </button>
+                <button class="nav-item" data-tab="gallery">
+                    <span>🖼️</span> Manage Gallery
+                </button>
+                <button class="nav-item" data-tab="ads">
+                    <span>📢</span> Ad Settings
+                </button>
+                <button class="nav-item" data-tab="categories">
+                    <span>📁</span> Categories
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="logout-btn">Logout</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <!-- Upload Tab -->
+            <section id="uploadTab" class="tab-content active">
+                <div class="tab-header">
+                    <h2>📤 Upload Wallpaper</h2>
+                    <p>Add new anime wallpaper to the gallery</p>
+                </div>
+
+                <form id="uploadForm" class="form-container">
+                    <!-- Image Upload -->
+                    <div class="form-group">
+                        <label for="imageFile">Select Image *</label>
+                        <div class="file-upload-zone" id="fileUploadZone">
+                            <input type="file" id="imageFile" name="image" accept="image/*" required>
+                            <p>Drag and drop image here or click to select</p>
+                            <small>Supported: JPG, PNG, WebP (Max 10MB)</small>
+                        </div>
+                        <div id="imagePreview" style="display: none; margin-top: 1rem;">
+                            <img id="previewImg" style="max-width: 200px; max-height: 300px; border-radius: 4px;">
+                        </div>
+                    </div>
+
+                    <!-- Title -->
+                    <div class="form-group">
+                        <label for="imageTitle">Image Title *</label>
+                        <input type="text" id="imageTitle" name="title" placeholder="e.g., Naruto Uzumaki - Hokage" required maxlength="100">
+                    </div>
+
+                    <!-- Description -->
+                    <div class="form-group">
+                        <label for="imageDescription">Description</label>
+                        <textarea id="imageDescription" name="description" placeholder="Short description of the wallpaper" maxlength="500" rows="3"></textarea>
+                    </div>
+
+                    <!-- Category -->
+                    <div class="form-group">
+                        <label for="imageCategory">Category *</label>
+                        <select id="imageCategory" name="category" required>
+                            <option value="">Select a category</option>
+                            <option value="General">General</option>
+                            <option value="Naruto">Naruto</option>
+                            <option value="One Piece">One Piece</option>
+                            <option value="Attack on Titan">Attack on Titan</option>
+                            <option value="My Hero Academia">My Hero Academia</option>
+                            <option value="Demon Slayer">Demon Slayer</option>
+                            <option value="Jujutsu Kaisen">Jujutsu Kaisen</option>
+                        </select>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="form-group">
+                        <label for="imageTags">Tags (comma-separated)</label>
+                        <input type="text" id="imageTags" name="tags" placeholder="e.g., anime, character, 4k, blue">
+                    </div>
+
+                    <!-- Submit -->
+                    <button type="submit" class="btn btn-primary">
+                        📤 Upload Image
+                    </button>
+                </form>
+
+                <div id="uploadStatus" class="status-message" style="display: none;"></div>
+            </section>
+
+            <!-- Gallery Tab -->
+            <section id="galleryTab" class="tab-content">
+                <div class="tab-header">
+                    <h2>🖼️ Manage Gallery</h2>
+                    <p>View, edit, and delete wallpapers</p>
+                </div>
+
+                <div class="gallery-manager">
+                    <div id="galleryList" class="gallery-list">
+                        <!-- Images loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Ad Settings Tab -->
+            <section id="adsTab" class="tab-content">
+                <div class="tab-header">
+                    <h2>📢 Ad Settings</h2>
+                    <p>Manage Yandex ad codes</p>
+                </div>
+
+                <form id="adsForm" class="form-container">
+                    <!-- Header Ad -->
+                    <div class="form-group">
+                        <label for="headerAd">Header Ad Code</label>
+                        <textarea id="headerAd" name="headerAd" placeholder="<!-- YANDEX AD -->" rows="4"></textarea>
+                        <small>Placed below header and above filter buttons</small>
+                    </div>
+
+                    <!-- In-Content Ad -->
+                    <div class="form-group">
+                        <label for="inContentAd">In-Content Ad Code</label>
+                        <textarea id="inContentAd" name="inContentAd" placeholder="<!-- YANDEX AD -->" rows="4"></textarea>
+                        <small>Placed after every 6 images in the gallery</small>
+                    </div>
+
+                    <!-- Footer Ad -->
+                    <div class="form-group">
+                        <label for="footerAd">Footer Ad Code</label>
+                        <textarea id="footerAd" name="footerAd" placeholder="<!-- YANDEX AD -->" rows="4"></textarea>
+                        <small>Placed before footer</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        💾 Save Ad Settings
+                    </button>
+                </form>
+
+                <div id="adsStatus" class="status-message" style="display: none;"></div>
+            </section>
+
+            <!-- Categories Tab -->
+            <section id="categoriesTab" class="tab-content">
+                <div class="tab-header">
+                    <h2>📁 Categories</h2>
+                    <p>Manage wallpaper categories</p>
+                </div>
+
+                <div class="form-container">
+                    <div class="form-group">
+                        <label for="newCategoryName">Add New Category</label>
+                        <div style="display:flex; gap:0.5rem;">
+                            <input type="text" id="newCategoryName" placeholder="e.g., Naruto" style="flex:1;" />
+                            <button id="addCategoryBtn" class="btn btn-primary">Add</button>
+                        </div>
+                        <small>Add a new category (appears in select lists).</small>
+                    </div>
+
+                    <hr style="border-color: var(--border); margin: 1rem 0;" />
+
+                    <div id="categoriesList" class="categories-list">
+                        <!-- Categories loaded here with actions -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal active">
+        <div class="modal-content">
+            <h2>Admin Login</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="adminPassword">Admin Password</label>
+                    <input type="password" id="adminPassword" placeholder="Enter admin password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    Login
+                </button>
+            </form>
+            <div id="loginStatus" class="status-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
