@@ -90,19 +90,23 @@ function initSqlite() {
         views INTEGER,
         width INTEGER,
         height INTEGER,
-        size INTEGER
+        size INTEGER,
+        likes INTEGER DEFAULT 0,
+        downloads INTEGER DEFAULT 0
       )
     `);
     sqliteDb.run(`CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY)`);
     sqliteDb.run(`CREATE TABLE IF NOT EXISTS adSettings (key TEXT PRIMARY KEY, value TEXT)`);
 
-    // Ensure new columns exist (width,height,size) for older DBs
+    // Ensure new columns exist for older DBs
     sqliteDb.all("PRAGMA table_info(images)", [], (err, cols) => {
       if (!err && Array.isArray(cols)) {
         const names = cols.map(c => c.name);
         if (!names.includes('width')) sqliteDb.run('ALTER TABLE images ADD COLUMN width INTEGER');
         if (!names.includes('height')) sqliteDb.run('ALTER TABLE images ADD COLUMN height INTEGER');
         if (!names.includes('size')) sqliteDb.run('ALTER TABLE images ADD COLUMN size INTEGER');
+        if (!names.includes('likes')) sqliteDb.run('ALTER TABLE images ADD COLUMN likes INTEGER DEFAULT 0');
+        if (!names.includes('downloads')) sqliteDb.run('ALTER TABLE images ADD COLUMN downloads INTEGER DEFAULT 0');
       }
     });
   });
@@ -130,7 +134,9 @@ function loadDatabase() {
                 views: r.views,
                 width: r.width || null,
                 height: r.height || null,
-                size: r.size || null
+                size: r.size || null,
+                likes: r.likes || 0,
+                downloads: r.downloads || 0
               });
             });
           }
@@ -262,6 +268,29 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Public API - Get individual wallpaper by ID
+// Public API - Like a wallpaper
+app.post('/api/wallpapers/like/:id', (req, res) => {
+  const id = req.params.id;
+  sqliteDb.run('UPDATE images SET likes = likes + 1 WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: 'Failed to like wallpaper' });
+    sqliteDb.get('SELECT likes FROM images WHERE id = ?', [id], (err2, row) => {
+      if (err2 || !row) return res.status(404).json({ error: 'Wallpaper not found' });
+      res.json({ likes: row.likes });
+    });
+  });
+});
+
+// Public API - Download counter
+app.post('/api/wallpapers/download/:id', (req, res) => {
+  const id = req.params.id;
+  sqliteDb.run('UPDATE images SET downloads = downloads + 1 WHERE id = ?', [id], function (err) {
+    if (err) return res.status(500).json({ error: 'Failed to increment download count' });
+    sqliteDb.get('SELECT downloads FROM images WHERE id = ?', [id], (err2, row) => {
+      if (err2 || !row) return res.status(404).json({ error: 'Wallpaper not found' });
+      res.json({ downloads: row.downloads });
+    });
+  });
+});
 app.get('/api/wallpapers/:id', async (req, res) => {
   const db = await loadDatabase();
   const wallpaper = db.images.find(img => img.id === req.params.id);
