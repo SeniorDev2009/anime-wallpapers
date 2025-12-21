@@ -214,7 +214,54 @@ function createImageCard(imageData) {
   actions.style.display = 'flex';
   actions.style.gap = '0.5rem';
   actions.style.marginTop = '0.5rem';
-  
+
+  // Like button
+  const likeBtn = document.createElement('button');
+  likeBtn.className = 'image-btn';
+  likeBtn.textContent = '❤️ Like';
+  likeBtn.style.flex = '1';
+  likeBtn.style.padding = '0.4rem';
+  likeBtn.style.fontSize = '0.75rem';
+  likeBtn.style.background = 'rgba(255,255,255,0.2)';
+  likeBtn.style.color = 'white';
+  likeBtn.style.border = 'none';
+  likeBtn.style.borderRadius = '4px';
+  likeBtn.style.cursor = 'pointer';
+  likeBtn.style.fontWeight = '500';
+
+  // Show liked state from localStorage
+  const likedWallpapers = JSON.parse(localStorage.getItem('likedWallpapers') || '[]');
+  if (likedWallpapers.includes(imageData.id)) {
+    likeBtn.style.background = '#e74c3c';
+    likeBtn.textContent = '💖 Liked';
+  }
+
+  // Like count display
+  const likeCount = document.createElement('span');
+  likeCount.className = 'like-count';
+  likeCount.textContent = ` ${imageData.likes || 0}`;
+  likeCount.style.marginLeft = '0.3rem';
+  likeBtn.appendChild(likeCount);
+
+  likeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    let liked = JSON.parse(localStorage.getItem('likedWallpapers') || '[]');
+    if (!liked.includes(imageData.id)) {
+      liked.push(imageData.id);
+      localStorage.setItem('likedWallpapers', JSON.stringify(liked));
+      likeBtn.style.background = '#e74c3c';
+      likeBtn.textContent = '💖 Liked';
+      likeBtn.appendChild(likeCount);
+      // Send like to server
+      fetch('/api/wallpapers/like/' + imageData.id, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          likeCount.textContent = ` ${data.likes}`;
+        });
+    }
+  });
+
+  // Download button
   const downloadBtn = document.createElement('button');
   downloadBtn.className = 'image-btn';
   downloadBtn.textContent = '⬇️ Download';
@@ -227,13 +274,27 @@ function createImageCard(imageData) {
   downloadBtn.style.borderRadius = '4px';
   downloadBtn.style.cursor = 'pointer';
   downloadBtn.style.fontWeight = '500';
+  // Download count display
+  const downloadCount = document.createElement('span');
+  downloadCount.className = 'download-count';
+  downloadCount.textContent = ` ${imageData.downloads || 0}`;
+  downloadCount.style.marginLeft = '0.3rem';
+  downloadBtn.appendChild(downloadCount);
+
   downloadBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     downloadImage(imageData.filename, imageData.title);
+    // Send download event to server
+    fetch('/api/wallpapers/download/' + imageData.id, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        downloadCount.textContent = ` ${data.downloads}`;
+      });
   });
-  
+
+  actions.appendChild(likeBtn);
   actions.appendChild(downloadBtn);
-  
+
   overlay.appendChild(title);
   overlay.appendChild(category);
   overlay.appendChild(actions);
