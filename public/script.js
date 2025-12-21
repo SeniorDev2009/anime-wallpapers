@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Inject ad settings
+  injectAdSettings();
+
   loadCategories();
   createPreviewModal();
   loadWallpapers();
@@ -54,6 +57,28 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', onSearch);
   }
 });
+
+// Inject ad settings from backend into ad containers
+async function injectAdSettings() {
+  try {
+    const response = await fetch('/api/ads');
+    const ads = await response.json();
+    if (ads.headerAd) {
+      const headerAd = document.querySelector('.ad-header');
+      if (headerAd) headerAd.innerHTML = ads.headerAd;
+    }
+    if (ads.inContentAd) {
+      const inlineAd = document.querySelector('.ad-inline');
+      if (inlineAd) inlineAd.innerHTML = ads.inContentAd;
+    }
+    if (ads.footerAd) {
+      const footerAd = document.querySelector('.ad-footer');
+      if (footerAd) footerAd.innerHTML = ads.footerAd;
+    }
+  } catch (err) {
+    // fail silently
+  }
+}
 
 // ============================================
 // LOAD CATEGORIES
