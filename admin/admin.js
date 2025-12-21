@@ -102,6 +102,33 @@ function setupUploadForm() {
   const imagePreview = document.getElementById('imagePreview');
   const previewImg = document.getElementById('previewImg');
   const uploadStatus = document.getElementById('uploadStatus');
+  const imageCategory = document.getElementById('imageCategory');
+
+  // Dynamically load categories into dropdown
+  async function populateCategoryDropdown() {
+    try {
+      const response = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword })
+      });
+      const data = await response.json();
+      if (data.categories && Array.isArray(data.categories)) {
+        imageCategory.innerHTML = '<option value="">Select a category</option>';
+        data.categories.forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat;
+          opt.textContent = cat;
+          imageCategory.appendChild(opt);
+        });
+      }
+    } catch (err) {
+      // fallback: do nothing
+    }
+  }
+  // Populate on admin init and after adding category
+  populateCategoryDropdown();
+  window.populateCategoryDropdown = populateCategoryDropdown;
 
   // Click to upload
   fileUploadZone.addEventListener('click', () => imageFile.click());
@@ -149,7 +176,7 @@ function setupUploadForm() {
     formData.append('image', imageFile.files[0]);
     formData.append('title', document.getElementById('imageTitle').value);
     formData.append('description', document.getElementById('imageDescription').value);
-    formData.append('category', document.getElementById('imageCategory').value);
+    formData.append('category', imageCategory.value);
     formData.append('tags', document.getElementById('imageTags').value);
     formData.append('password', adminPassword);
 
@@ -168,6 +195,8 @@ function setupUploadForm() {
         setTimeout(() => {
           loadGallery();
         }, 1000);
+        // Refresh category dropdown in case a new category was added
+        populateCategoryDropdown();
       } else {
         showStatus(uploadStatus, '✗ ' + (data.error || 'Upload failed'), 'error');
       }
@@ -452,6 +481,7 @@ function setupCategoriesForm() {
         showStatus(status, 'Category added', 'success');
         input.value = '';
         loadCategories();
+        if (window.populateCategoryDropdown) window.populateCategoryDropdown();
       } else {
         showStatus(status, data.error || 'Failed to add category', 'error');
       }

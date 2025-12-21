@@ -23,26 +23,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
-// Database path
-const DB_PATH = path.join(__dirname, 'database.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 // Ensure uploads directory exists
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
-// Initialize database
-if (!fs.existsSync(DB_PATH)) {
-  fs.writeFileSync(DB_PATH, JSON.stringify({
-    images: [],
-    categories: [],
-    adSettings: {
-      headerAd: '<!-- YANDEX AD HEADER -->',
-      inContentAd: '<!-- YANDEX AD IN-CONTENT -->',
-      footerAd: '<!-- YANDEX AD FOOTER -->'
-    }
-  }, null, 2));
 }
 
 // Multer storage configuration
@@ -111,68 +96,15 @@ function initSqlite() {
     sqliteDb.run(`CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY)`);
     sqliteDb.run(`CREATE TABLE IF NOT EXISTS adSettings (key TEXT PRIMARY KEY, value TEXT)`);
 
-    // Import from JSON on first run
-      // Ensure new columns exist (width,height,size) for older DBs
-      sqliteDb.all("PRAGMA table_info(images)", [], (err, cols) => {
-        if (!err && Array.isArray(cols)) {
-          const names = cols.map(c => c.name);
-          if (!names.includes('width')) sqliteDb.run('ALTER TABLE images ADD COLUMN width INTEGER');
-          if (!names.includes('height')) sqliteDb.run('ALTER TABLE images ADD COLUMN height INTEGER');
-          if (!names.includes('size')) sqliteDb.run('ALTER TABLE images ADD COLUMN size INTEGER');
-        }
-      });
-
-    if (fs.existsSync(DB_PATH)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-        
-        // Check if already imported by checking image count
-        sqliteDb.get('SELECT COUNT(*) as count FROM images', (err, row) => {
-          if (!err && row && row.count === 0 && raw.images && raw.images.length > 0) {
-            // Import images
-            if (Array.isArray(raw.images)) {
-              const stmt = sqliteDb.prepare(
-                `INSERT INTO images (id,filename,title,description,category,tags,uploadedAt,views,width,height,size) VALUES (?,?,?,?,?,?,?,?,?,?)`
-              );
-              raw.images.forEach(img => {
-                stmt.run([
-                  img.id,
-                  img.filename,
-                  img.title || '',
-                  img.description || '',
-                  img.category || '',
-                  JSON.stringify(img.tags || []),
-                  img.uploadedAt || new Date().toISOString(),
-                  img.views || 0,
-                  img.width || null,
-                  img.height || null,
-                  img.size || null
-                ]);
-              });
-              stmt.finalize();
-            }
-
-            // Import categories
-            if (Array.isArray(raw.categories)) {
-              const cStmt = sqliteDb.prepare(`INSERT INTO categories (name) VALUES (?)`);
-              raw.categories.forEach(c => cStmt.run([c]));
-              cStmt.finalize();
-            }
-
-            // Import ad settings
-            if (raw.adSettings) {
-              const aStmt = sqliteDb.prepare(`INSERT INTO adSettings (key,value) VALUES (?,?)`);
-              Object.keys(raw.adSettings).forEach(k => aStmt.run([k, raw.adSettings[k] || '']));
-              aStmt.finalize();
-            }
-
-            console.log('📚 Imported data from database.json into SQLite');
-          }
-        });
-      } catch (err) {
-        console.error('Failed to import JSON DB into SQLite:', err);
+    // Ensure new columns exist (width,height,size) for older DBs
+    sqliteDb.all("PRAGMA table_info(images)", [], (err, cols) => {
+      if (!err && Array.isArray(cols)) {
+        const names = cols.map(c => c.name);
+        if (!names.includes('width')) sqliteDb.run('ALTER TABLE images ADD COLUMN width INTEGER');
+        if (!names.includes('height')) sqliteDb.run('ALTER TABLE images ADD COLUMN height INTEGER');
+        if (!names.includes('size')) sqliteDb.run('ALTER TABLE images ADD COLUMN size INTEGER');
       }
-    }
+    });
   });
 }
 
@@ -390,7 +322,6 @@ app.get('/api/wallpapers/similar/:id', async (req, res) => {
 app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
   try {
     const password = req.body.password;
-    
     if (!verifyPassword(password)) {
       fs.unlinkSync(req.file.path);
       return res.status(401).json({ error: 'Invalid password' });
@@ -403,13 +334,6 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
     const description = req.body.description || '';
     const category = req.body.category || 'General';
     const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(t => t);
-
-    const db = await loadDatabase();
-
-    // Add category if new
-    if (!db.categories.includes(category)) {
-      db.categories.push(category);
-    }
 
     // Probe file for metadata (width, height, size)
     let width = null, height = null, size = null;
@@ -431,31 +355,55 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
       console.warn('stat failed for', filePath, e.message || e);
     }
 
-    // Add image metadata (thumbnail computed dynamically)
-    const imageData = {
-      id: crypto.randomBytes(6).toString('hex'),
-      filename: filename,
-      title: title,
-      description: description,
-      category: category,
-      tags: tags,
-      uploadedAt: new Date().toISOString(),
-      views: 0,
-      width: width,
-      height: height,
-      size: size
-    };
+    // Add category if new
+    sqliteDb.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [category]);
 
-    if (!db.images) db.images = [];
-    db.images.unshift(imageData);
-
-    await saveDatabase(db);
-
-    res.json({ 
-      success: true, 
-      image: addThumbnails([imageData])[0],
-      message: 'Image uploaded successfully'
-    });
+    // Insert image directly into SQLite
+    const id = crypto.randomBytes(6).toString('hex');
+    const uploadedAt = new Date().toISOString();
+    sqliteDb.run(
+      `INSERT INTO images (id, filename, title, description, category, tags, uploadedAt, views, width, height, size)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        filename,
+        title,
+        description,
+        category,
+        JSON.stringify(tags),
+        uploadedAt,
+        0,
+        width,
+        height,
+        size
+      ],
+      function (err) {
+        if (err) {
+          console.error('SQLite insert error:', err);
+          return res.status(500).json({ error: 'Failed to save image to database' });
+        }
+        // Return the inserted image data
+        res.json({
+          success: true,
+          image: addThumbnails([
+            {
+              id,
+              filename,
+              title,
+              description,
+              category,
+              tags,
+              uploadedAt,
+              views: 0,
+              width,
+              height,
+              size
+            }
+          ])[0],
+          message: 'Image uploaded successfully'
+        });
+      }
+    );
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Upload failed' });
@@ -465,214 +413,201 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
 // Admin API - Delete image
 app.post('/api/admin/delete', async (req, res) => {
   const { password, imageId } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  const imageIndex = db.images.findIndex(img => img.id === imageId);
-
-  if (imageIndex === -1) {
-    return res.status(404).json({ error: 'Image not found' });
-  }
-
-  const image = db.images[imageIndex];
-  const filePath = path.join(UPLOADS_DIR, image.filename);
-
-  // Delete file from disk
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+  // Get image filename from DB
+  sqliteDb.get('SELECT filename FROM images WHERE id = ?', [imageId], (err, row) => {
+    if (err || !row) {
+      return res.status(404).json({ error: 'Image not found' });
     }
-  } catch (err) {
-    console.error('File delete error:', err);
-  }
-
-  // Delete from database
-  db.images.splice(imageIndex, 1);
-  await saveDatabase(db);
-
-  res.json({ success: true, message: 'Image deleted successfully' });
+    const filePath = path.join(UPLOADS_DIR, row.filename);
+    // Delete file from disk
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      console.error('File delete error:', err);
+    }
+    // Delete from database
+    sqliteDb.run('DELETE FROM images WHERE id = ?', [imageId], function (err2) {
+      if (err2) {
+        return res.status(500).json({ error: 'Failed to delete image from database' });
+      }
+      res.json({ success: true, message: 'Image deleted successfully' });
+    });
+  });
 });
 
 // Admin API - Update image
 app.post('/api/admin/update', async (req, res) => {
   const { password, imageId, title, description, category, tags } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  const image = db.images.find(img => img.id === imageId);
-
-  if (!image) {
-    return res.status(404).json({ error: 'Image not found' });
+  // Add new category if needed
+  if (category) {
+    sqliteDb.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [category]);
   }
-
-  image.title = title || image.title;
-  image.description = description || image.description;
-  image.category = category || image.category;
-  if (tags) {
-    image.tags = tags.split(',').map(t => t.trim()).filter(t => t);
-  }
-
-  // Add new category if provided
-  if (category && !db.categories.includes(category)) {
-    db.categories.push(category);
-  }
-
-  await saveDatabase(db);
-
-  res.json({ success: true, image: addThumbnails([image])[0], message: 'Image updated successfully' });
+  // Update image in DB
+  sqliteDb.run(
+    'UPDATE images SET title = ?, description = ?, category = ?, tags = ? WHERE id = ?',
+    [
+      title,
+      description,
+      category,
+      tags ? JSON.stringify(tags.split(',').map(t => t.trim()).filter(t => t)) : null,
+      imageId
+    ],
+    function (err) {
+      if (err || this.changes === 0) {
+        return res.status(404).json({ error: 'Image not found or update failed' });
+      }
+      // Return updated image
+      sqliteDb.get('SELECT * FROM images WHERE id = ?', [imageId], (err2, row) => {
+        if (err2 || !row) {
+          return res.status(404).json({ error: 'Image not found after update' });
+        }
+        row.tags = JSON.parse(row.tags || '[]');
+        res.json({ success: true, image: addThumbnails([row])[0], message: 'Image updated successfully' });
+      });
+    }
+  );
 });
 
 // Admin API - Get all images (for admin panel)
 app.post('/api/admin/images', async (req, res) => {
   const { password } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  res.json({ images: addThumbnails(db.images || []) });
+  sqliteDb.all('SELECT * FROM images ORDER BY uploadedAt DESC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch images' });
+    rows.forEach(r => r.tags = JSON.parse(r.tags || '[]'));
+    res.json({ images: addThumbnails(rows) });
+  });
 });
 
 // Admin API - Update ad settings
 app.post('/api/admin/ads', async (req, res) => {
   const { password, headerAd, inContentAd, footerAd } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  db.adSettings = {
-    headerAd: headerAd || db.adSettings.headerAd,
-    inContentAd: inContentAd || db.adSettings.inContentAd,
-    footerAd: footerAd || db.adSettings.footerAd
-  };
-
-  await saveDatabase(db);
-
-  res.json({ success: true, message: 'Ad settings updated successfully' });
+  // Update ad settings in DB
+  sqliteDb.serialize(() => {
+    sqliteDb.run('INSERT OR REPLACE INTO adSettings (key, value) VALUES (?, ?)', ['headerAd', headerAd || '']);
+    sqliteDb.run('INSERT OR REPLACE INTO adSettings (key, value) VALUES (?, ?)', ['inContentAd', inContentAd || '']);
+    sqliteDb.run('INSERT OR REPLACE INTO adSettings (key, value) VALUES (?, ?)', ['footerAd', footerAd || '']);
+    res.json({ success: true, message: 'Ad settings updated successfully' });
+  });
 });
 
 // Admin API - Get ad settings (for admin panel)
 app.post('/api/admin/ads-get', async (req, res) => {
   const { password } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  res.json(db.adSettings || {});
+  sqliteDb.all('SELECT key, value FROM adSettings', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch ad settings' });
+    const adSettings = {};
+    rows.forEach(a => adSettings[a.key] = a.value);
+    res.json(adSettings);
+  });
 });
 
 // Admin API - Get categories
 app.post('/api/admin/categories', async (req, res) => {
   const { password } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
-  const db = await loadDatabase();
-  res.json({ categories: db.categories || [] });
+  sqliteDb.all('SELECT name FROM categories', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch categories' });
+    res.json({ categories: rows.map(r => r.name) });
+  });
 });
 
 // Admin API - Add new category
 app.post('/api/admin/category-add', async (req, res) => {
   const { password, name } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
   if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
-
-  const db = await loadDatabase();
-  if (!db.categories) db.categories = [];
-
-  if (db.categories.includes(name)) {
-    return res.status(400).json({ error: 'Category already exists' });
-  }
-
-  db.categories.push(name);
-  await saveDatabase(db);
-
-  res.json({ success: true, categories: db.categories });
+  sqliteDb.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [name], function (err) {
+    if (err) return res.status(500).json({ error: 'Failed to add category' });
+    // Return updated categories
+    sqliteDb.all('SELECT name FROM categories', [], (err2, rows) => {
+      if (err2) return res.status(500).json({ error: 'Failed to fetch categories' });
+      res.json({ success: true, categories: rows.map(r => r.name) });
+    });
+  });
 });
 
 // Admin API - Update (rename) category
 app.post('/api/admin/category-update', async (req, res) => {
   const { password, oldName, newName } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
   if (!oldName || !newName) {
     return res.status(400).json({ error: 'oldName and newName are required' });
   }
-
-  const db = await loadDatabase();
-  const idx = db.categories.findIndex(c => c === oldName);
-  if (idx === -1) return res.status(404).json({ error: 'Category not found' });
-
-  // Avoid duplicate
-  if (db.categories.includes(newName) && newName !== oldName) {
-    return res.status(400).json({ error: 'Category with newName already exists' });
-  }
-
-  // Rename category in categories list
-  db.categories[idx] = newName;
-
-  // Update images using this category
-  if (db.images && Array.isArray(db.images)) {
-    db.images.forEach(img => {
-      if (img.category === oldName) img.category = newName;
+  // Check for duplicate
+  sqliteDb.get('SELECT name FROM categories WHERE name = ?', [newName], (err, row) => {
+    if (row && newName !== oldName) {
+      return res.status(400).json({ error: 'Category with newName already exists' });
+    }
+    // Update category name
+    sqliteDb.run('UPDATE categories SET name = ? WHERE name = ?', [newName, oldName], function (err2) {
+      if (err2 || this.changes === 0) {
+        return res.status(404).json({ error: 'Category not found or update failed' });
+      }
+      // Update images using this category
+      sqliteDb.run('UPDATE images SET category = ? WHERE category = ?', [newName, oldName], function (err3) {
+        if (err3) {
+          return res.status(500).json({ error: 'Failed to update images with new category' });
+        }
+        // Return updated categories
+        sqliteDb.all('SELECT name FROM categories', [], (err4, rows) => {
+          if (err4) return res.status(500).json({ error: 'Failed to fetch categories' });
+          res.json({ success: true, categories: rows.map(r => r.name) });
+        });
+      });
     });
-  }
-
-  await saveDatabase(db);
-  res.json({ success: true, categories: db.categories });
+  });
 });
 
 // Admin API - Delete category
 app.post('/api/admin/category-delete', async (req, res) => {
   const { password, name, fallback } = req.body;
-
   if (!verifyPassword(password)) {
     return res.status(401).json({ error: 'Invalid password' });
   }
-
   if (!name) return res.status(400).json({ error: 'name is required' });
-
-  const db = await loadDatabase();
-  const idx = db.categories.findIndex(c => c === name);
-  if (idx === -1) return res.status(404).json({ error: 'Category not found' });
-
-  // Remove category
-  db.categories.splice(idx, 1);
-
-  // Set images with this category to fallback (default to 'General')
   const fallbackCategory = fallback || 'General';
-  if (!db.categories.includes(fallbackCategory)) {
-    db.categories.push(fallbackCategory);
-  }
-
-  if (db.images && Array.isArray(db.images)) {
-    db.images.forEach(img => {
-      if (img.category === name) img.category = fallbackCategory;
+  // Ensure fallback category exists
+  sqliteDb.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [fallbackCategory], function (err) {
+    if (err) return res.status(500).json({ error: 'Failed to ensure fallback category' });
+    // Update images with this category to fallback
+    sqliteDb.run('UPDATE images SET category = ? WHERE category = ?', [fallbackCategory, name], function (err2) {
+      if (err2) return res.status(500).json({ error: 'Failed to update images to fallback category' });
+      // Remove category
+      sqliteDb.run('DELETE FROM categories WHERE name = ?', [name], function (err3) {
+        if (err3 || this.changes === 0) {
+          return res.status(404).json({ error: 'Category not found or delete failed' });
+        }
+        // Return updated categories
+        sqliteDb.all('SELECT name FROM categories', [], (err4, rows) => {
+          if (err4) return res.status(500).json({ error: 'Failed to fetch categories' });
+          res.json({ success: true, categories: rows.map(r => r.name) });
+        });
+      });
     });
-  }
-
-  await saveDatabase(db);
-  res.json({ success: true, categories: db.categories });
+  });
 });
 
 // Serve admin panel
