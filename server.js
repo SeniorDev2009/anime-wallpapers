@@ -285,6 +285,14 @@ function verifyPassword(password) {
   return password === ADMIN_PASSWORD;
 }
 
+// Helper: add computed thumbnail URLs to images
+function addThumbnails(images) {
+  return (images || []).map(img => ({
+    ...img,
+    thumbnail: `/thumbnails/${img.filename}`
+  }));
+}
+
 // Initialize SQLite if configured
 if (USE_SQLITE) initSqlite();
 
@@ -299,7 +307,7 @@ app.get('/api/wallpapers', async (req, res) => {
   const total = images.length;
   const start = page * limit;
   const end = start + limit;
-  const paginatedImages = images.slice(start, end);
+  const paginatedImages = addThumbnails(images.slice(start, end));
   
   res.json({
     images: paginatedImages,
@@ -334,7 +342,7 @@ app.get('/api/wallpapers/:id', async (req, res) => {
   wallpaper.views = (wallpaper.views || 0) + 1;
   await saveDatabase(db);
   
-  res.json(wallpaper);
+  res.json(addThumbnails([wallpaper])[0]);
 });
 
 // Public API - Get similar wallpapers (server-side, paged)
@@ -373,7 +381,7 @@ app.get('/api/wallpapers/similar/:id', async (req, res) => {
   const total = scored.length;
   const start = page * limit;
   const end = start + limit;
-  const pageItems = scored.slice(start, end);
+  const pageItems = addThumbnails(scored.slice(start, end));
 
   res.json({ images: pageItems, page, limit, total, hasMore: end < total });
 });
@@ -423,7 +431,7 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
       console.warn('stat failed for', filePath, e.message || e);
     }
 
-    // Add image metadata
+    // Add image metadata (thumbnail computed dynamically)
     const imageData = {
       id: crypto.randomBytes(6).toString('hex'),
       filename: filename,
@@ -435,8 +443,7 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
       views: 0,
       width: width,
       height: height,
-      size: size,
-      thumbnail: fs.existsSync(thumbPath) ? `/thumbnails/${filename}` : null
+      size: size
     };
 
     if (!db.images) db.images = [];
@@ -446,7 +453,7 @@ app.post('/api/admin/upload', upload.single('image'), async (req, res) => {
 
     res.json({ 
       success: true, 
-      image: imageData,
+      image: addThumbnails([imageData])[0],
       message: 'Image uploaded successfully'
     });
   } catch (err) {
@@ -518,7 +525,7 @@ app.post('/api/admin/update', async (req, res) => {
 
   await saveDatabase(db);
 
-  res.json({ success: true, image: image, message: 'Image updated successfully' });
+  res.json({ success: true, image: addThumbnails([image])[0], message: 'Image updated successfully' });
 });
 
 // Admin API - Get all images (for admin panel)
@@ -530,7 +537,7 @@ app.post('/api/admin/images', async (req, res) => {
   }
 
   const db = await loadDatabase();
-  res.json({ images: db.images || [] });
+  res.json({ images: addThumbnails(db.images || []) });
 });
 
 // Admin API - Update ad settings
