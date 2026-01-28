@@ -11,6 +11,9 @@ let currentFilter = 'all';
 let allImages = [];
 let searchQuery = '';
 let lastTotal = 0;
+let scrollObserver = null;
+let scrollSentinel = null;
+let lastScrollTrigger = 0;
 
 // DOM Elements
 const gallery = document.getElementById('gallery');
@@ -59,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateClearSearch();
       updateFilterChips();
       updateResultsInfo();
+      setupInfiniteScroll();
       loadWallpapers();
     }, 300);
 
@@ -79,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateClearSearch();
       updateFilterChips();
       updateResultsInfo();
+      setupInfiniteScroll();
       loadWallpapers();
     });
   }
@@ -166,6 +171,7 @@ async function loadWallpapers() {
     if (!hasMore) {
       loadingIndicator.classList.add('hidden');
       endMessage.style.display = 'block';
+      disableInfiniteScroll();
     }
   } catch (err) {
     console.error('Error loading wallpapers:', err);
@@ -728,6 +734,7 @@ function filterByCategory(category) {
   endMessage.style.display = 'none';
   updateFilterChips();
   updateResultsInfo();
+  setupInfiniteScroll();
   loadWallpapers();
 }
 
@@ -777,6 +784,7 @@ function updateFilterChips() {
       updateClearSearch();
       updateFilterChips();
       updateResultsInfo();
+      setupInfiniteScroll();
       loadWallpapers();
     });
     activeFilters.appendChild(chip);
@@ -802,22 +810,38 @@ function setupInfiniteScroll() {
     rootMargin: '100px',
     threshold: 0.1
   };
-  
-  const observer = new IntersectionObserver((entries) => {
+
+  if (scrollObserver) {
+    scrollObserver.disconnect();
+  }
+
+  scrollObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-      if (entry.isIntersecting && !isLoading && hasMore) {
-        loadWallpapers();
-      }
+      if (!entry.isIntersecting || isLoading || !hasMore) return;
+      const now = Date.now();
+      if (now - lastScrollTrigger < 250) return;
+      lastScrollTrigger = now;
+      loadWallpapers();
     });
   }, options);
-  
-  // Create a sentinel element
-  const sentinel = document.createElement('div');
-  sentinel.id = 'scroll-sentinel';
-  sentinel.style.height = '1px';
-  
-  gallery.parentNode.insertBefore(sentinel, gallery.nextSibling);
-  observer.observe(sentinel);
+
+  if (!scrollSentinel) {
+    scrollSentinel = document.createElement('div');
+    scrollSentinel.id = 'scroll-sentinel';
+    scrollSentinel.style.height = '1px';
+  }
+
+  if (scrollSentinel.parentNode) {
+    scrollSentinel.parentNode.removeChild(scrollSentinel);
+  }
+
+  gallery.parentNode.insertBefore(scrollSentinel, gallery.nextSibling);
+  scrollObserver.observe(scrollSentinel);
+}
+
+function disableInfiniteScroll() {
+  if (!scrollObserver || !scrollSentinel) return;
+  scrollObserver.unobserve(scrollSentinel);
 }
 
 // ============================================
