@@ -10,12 +10,14 @@ let hasMore = true;
 let currentFilter = 'all';
 let allImages = [];
 let searchQuery = '';
+let lastTotal = 0;
 
 // DOM Elements
 const gallery = document.getElementById('gallery');
 const loadingIndicator = document.getElementById('loadingIndicator');
 const endMessage = document.getElementById('endMessage');
 const categoryList = document.getElementById('categoryList');
+const resultsInfo = document.getElementById('resultsInfo');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -49,8 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Reset pagination and reload
       currentPage = 0;
       hasMore = true;
+      lastTotal = 0;
       gallery.innerHTML = '';
       endMessage.style.display = 'none';
+      updateResultsInfo();
       loadWallpapers();
     }, 300);
 
@@ -120,37 +124,21 @@ async function loadWallpapers() {
   loadingIndicator.classList.remove('hidden');
   
   try {
-    const response = await fetch(`/api/wallpapers?page=${currentPage}`);
+    const params = new URLSearchParams({
+      page: currentPage,
+      limit: IMAGES_PER_PAGE,
+      category: currentFilter,
+      q: searchQuery
+    });
+    const response = await fetch(`/api/wallpapers?${params.toString()}`);
     const data = await response.json();
     
     allImages = data.images;
     hasMore = data.hasMore;
+    lastTotal = data.total || 0;
     
-    // Filter by category if one is selected
-    let imagesToRender = currentFilter && currentFilter !== 'all' 
-      ? data.images.filter(img => img.category && img.category.toLowerCase() === currentFilter)
-      : data.images;
-
-    // Apply search query (client-side) if present
-    if (searchQuery && searchQuery.length > 0) {
-      const q = searchQuery.toLowerCase();
-      imagesToRender = imagesToRender.filter(img => {
-        const title = (img.title || '').toLowerCase();
-        const desc = (img.description || '').toLowerCase();
-        const category = (img.category || '').toLowerCase();
-        const tags = (img.tags || []).join(' ').toLowerCase();
-        const filename = (img.filename || '').toLowerCase();
-        return (
-          title.includes(q) ||
-          desc.includes(q) ||
-          category.includes(q) ||
-          tags.includes(q) ||
-          filename.includes(q)
-        );
-      });
-    }
-    
-    renderGallery(imagesToRender);
+    renderGallery(data.images || []);
+    updateResultsInfo();
     currentPage++;
     
     if (!hasMore) {
@@ -187,7 +175,7 @@ function createImageCard(imageData) {
   const img = document.createElement('img');
   img.alt = imageData.title || 'Anime Wallpaper';
   img.loading = 'lazy';
-  img.src = '/uploads/' + imageData.filename;
+  img.src = imageData.thumbnail || '/uploads/' + imageData.filename;
   
   img.addEventListener('load', () => {
     card.classList.remove('placeholder');
@@ -713,9 +701,30 @@ function filterByCategory(category) {
   // Reload gallery with filter applied
   currentPage = 0;
   hasMore = true;
+  lastTotal = 0;
   gallery.innerHTML = '';
   endMessage.style.display = 'none';
+  updateResultsInfo();
   loadWallpapers();
+}
+
+function updateResultsInfo() {
+  if (!resultsInfo) return;
+  if (lastTotal === 0) {
+    resultsInfo.textContent = searchQuery || (currentFilter && currentFilter !== 'all')
+      ? 'No results found'
+      : '';
+    return;
+  }
+  const filters = [];
+  if (currentFilter && currentFilter !== 'all') {
+    filters.push(`Category: ${currentFilter}`);
+  }
+  if (searchQuery) {
+    filters.push(`Search: "${searchQuery}"`);
+  }
+  const filterText = filters.length ? ` • ${filters.join(' • ')}` : '';
+  resultsInfo.textContent = `Showing ${Math.min((currentPage + 1) * IMAGES_PER_PAGE, lastTotal)} of ${lastTotal}${filterText}`;
 }
 
 // ============================================

@@ -168,6 +168,20 @@ body {
     display: contents;
 }
 
+.results-info {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .results-info {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
+}
+
 /* ============================================
    GALLERY GRID
    ============================================ */
