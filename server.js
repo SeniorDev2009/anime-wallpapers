@@ -234,23 +234,49 @@ function addThumbnails(images) {
 // Initialize SQLite if configured
 if (USE_SQLITE) initSqlite();
 
-// Public API - Get all wallpapers with pagination
+// Public API - Get all wallpapers with pagination, filter, and search
 app.get('/api/wallpapers', async (req, res) => {
-  const page = parseInt(req.query.page) || 0;
-  const limit = 12;
-  
+  const page = Math.max(0, parseInt(req.query.page) || 0);
+  const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 12));
+  const category = (req.query.category || '').toString().trim().toLowerCase();
+  const query = (req.query.q || '').toString().trim().toLowerCase();
+
   const db = await loadDatabase();
   const images = db.images || [];
-  
-  const total = images.length;
+
+  const matchesQuery = (img) => {
+    if (!query) return true;
+    const title = (img.title || '').toLowerCase();
+    const desc = (img.description || '').toLowerCase();
+    const cat = (img.category || '').toLowerCase();
+    const tags = Array.isArray(img.tags) ? img.tags.join(' ').toLowerCase() : '';
+    const filename = (img.filename || '').toLowerCase();
+    return (
+      title.includes(query) ||
+      desc.includes(query) ||
+      cat.includes(query) ||
+      tags.includes(query) ||
+      filename.includes(query)
+    );
+  };
+
+  const filtered = images.filter(img => {
+    const inCategory = !category || category === 'all'
+      ? true
+      : (img.category || '').toLowerCase() === category;
+    return inCategory && matchesQuery(img);
+  });
+
+  const total = filtered.length;
   const start = page * limit;
   const end = start + limit;
-  const paginatedImages = addThumbnails(images.slice(start, end));
-  
+  const paginatedImages = addThumbnails(filtered.slice(start, end));
+
   res.json({
     images: paginatedImages,
-    total: total,
-    page: page,
+    total,
+    page,
+    limit,
     hasMore: end < total
   });
 });
