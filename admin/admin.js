@@ -402,9 +402,16 @@ async function loadCategories() {
       body: JSON.stringify({ password: adminPassword })
     });
 
-    const data = await response.json();
     const categoriesList = document.getElementById('categoriesList');
     categoriesList.innerHTML = '';
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      categoriesList.innerHTML = `<p style="color: var(--text-secondary); text-align: center; padding: 1rem;">${data.error || 'Failed to load categories'}</p>`;
+      return;
+    }
+
+    const data = await response.json();
 
     if (data.categories && data.categories.length > 0) {
       data.categories.forEach(category => {
@@ -450,9 +457,15 @@ async function loadCategories() {
         item.appendChild(actions);
         categoriesList.appendChild(item);
       });
+    } else {
+      categoriesList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No categories yet</p>';
     }
   } catch (err) {
     console.error('Error loading categories:', err);
+    const categoriesList = document.getElementById('categoriesList');
+    if (categoriesList) {
+      categoriesList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 1rem;">Failed to load categories</p>';
+    }
   }
 }
 
