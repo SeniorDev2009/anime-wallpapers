@@ -18,6 +18,8 @@ const loadingIndicator = document.getElementById('loadingIndicator');
 const endMessage = document.getElementById('endMessage');
 const categoryList = document.getElementById('categoryList');
 const resultsInfo = document.getElementById('resultsInfo');
+const activeFilters = document.getElementById('activeFilters');
+const clearSearchBtn = document.getElementById('clearSearch');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -54,11 +56,31 @@ document.addEventListener('DOMContentLoaded', () => {
       lastTotal = 0;
       gallery.innerHTML = '';
       endMessage.style.display = 'none';
+      updateClearSearch();
+      updateFilterChips();
       updateResultsInfo();
       loadWallpapers();
     }, 300);
 
     searchInput.addEventListener('input', onSearch);
+    updateClearSearch();
+  }
+
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', () => {
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) searchInput.value = '';
+      searchQuery = '';
+      currentPage = 0;
+      hasMore = true;
+      lastTotal = 0;
+      gallery.innerHTML = '';
+      endMessage.style.display = 'none';
+      updateClearSearch();
+      updateFilterChips();
+      updateResultsInfo();
+      loadWallpapers();
+    });
   }
 });
 
@@ -704,6 +726,7 @@ function filterByCategory(category) {
   lastTotal = 0;
   gallery.innerHTML = '';
   endMessage.style.display = 'none';
+  updateFilterChips();
   updateResultsInfo();
   loadWallpapers();
 }
@@ -716,6 +739,7 @@ function updateResultsInfo() {
       : '';
     return;
   }
+  const loadedCount = gallery ? gallery.children.length : 0;
   const filters = [];
   if (currentFilter && currentFilter !== 'all') {
     filters.push(`Category: ${currentFilter}`);
@@ -724,7 +748,48 @@ function updateResultsInfo() {
     filters.push(`Search: "${searchQuery}"`);
   }
   const filterText = filters.length ? ` • ${filters.join(' • ')}` : '';
-  resultsInfo.textContent = `Showing ${Math.min((currentPage + 1) * IMAGES_PER_PAGE, lastTotal)} of ${lastTotal}${filterText}`;
+  resultsInfo.textContent = `Showing ${Math.min(loadedCount, lastTotal)} of ${lastTotal}${filterText}`;
+}
+
+function updateFilterChips() {
+  if (!activeFilters) return;
+  activeFilters.innerHTML = '';
+  if (currentFilter && currentFilter !== 'all') {
+    const chip = document.createElement('div');
+    chip.className = 'filter-chip';
+    chip.innerHTML = `Category: ${currentFilter} <button type="button" aria-label="Clear category">✕</button>`;
+    chip.querySelector('button').addEventListener('click', () => filterByCategory('all'));
+    activeFilters.appendChild(chip);
+  }
+  if (searchQuery) {
+    const chip = document.createElement('div');
+    chip.className = 'filter-chip';
+    chip.innerHTML = `Search: "${searchQuery}" <button type="button" aria-label="Clear search">✕</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) searchInput.value = '';
+      searchQuery = '';
+      currentPage = 0;
+      hasMore = true;
+      lastTotal = 0;
+      gallery.innerHTML = '';
+      endMessage.style.display = 'none';
+      updateClearSearch();
+      updateFilterChips();
+      updateResultsInfo();
+      loadWallpapers();
+    });
+    activeFilters.appendChild(chip);
+  }
+}
+
+function updateClearSearch() {
+  if (!clearSearchBtn) return;
+  if (searchQuery) {
+    clearSearchBtn.classList.remove('hidden');
+  } else {
+    clearSearchBtn.classList.add('hidden');
+  }
 }
 
 // ============================================
